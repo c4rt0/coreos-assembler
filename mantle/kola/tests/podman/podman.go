@@ -17,10 +17,9 @@ package podman
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
-
+	"fmt"
 	"github.com/coreos/coreos-assembler/mantle/kola"
 	"github.com/coreos/coreos-assembler/mantle/kola/cluster"
 	"github.com/coreos/coreos-assembler/mantle/kola/register"
@@ -31,6 +30,13 @@ import (
 
 // init runs when the package is imported and takes care of registering tests
 func init() {
+	register.RegisterTest(&register.Test{
+        Run:         podmanNOOP,
+        ClusterSize: 1,
+        Name:        `podman.noop`,
+        Distros:     []string{"fcos"},
+        Description: "Simple NOOP test",
+    	})
 	register.RegisterTest(&register.Test{
 		Run:         podmanBaseTest,
 		ClusterSize: 1,
@@ -85,6 +91,15 @@ type simplifiedPodmanInfo struct {
 		GraphDriverName string `json:"GraphDriverName"`
 		GraphRoot       string `json:"GraphRoot"`
 	}
+}
+
+func podmanNOOP(c cluster.TestCluster) {
+    // Get the first machine in the cluster
+    m := c.Machines()[0]
+    osrelease := c.MustSSH(m, `cat /etc/os-release`)
+    if string(osrelease) == "" {
+        c.Errorf("/etc/os-release was empty. Expected content.")
+    }
 }
 
 func getSimplifiedPsInfo(c cluster.TestCluster, m platform.Machine) (simplifiedPsInfo, error) {
