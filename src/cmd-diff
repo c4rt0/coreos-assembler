@@ -635,6 +635,89 @@ def cache_dir(dir):
     return dir
 
 
+def size_to_human_readable(size):
+    if size is None:
+        return "N/A"
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.0f}MiB"
+    if size >= 1024:
+        return f"{size / 1024:.0f}KiB"
+    return f"{size}B"
+
+
+def diff_sizes(diff_from, diff_to):
+    from_images = diff_from.meta.get('images', {})
+    to_images = diff_to.meta.get('images', {})
+    platforms = sorted(set(from_images.keys()) | set(to_images.keys()))
+
+    if not platforms:
+        print("No artifact images found in either build.")
+        return
+
+    # Column headers
+    hdr_platform = "platform"
+    hdr_compression = "type"
+    hdr_from = diff_from.id
+    hdr_to = diff_to.id
+
+    # Calculate column widths
+    col_platform = max(len(hdr_platform), max(len(p) for p in platforms))
+    col_compression = max(len(hdr_compression), len("uncompressed"))
+    col_from = max(len(hdr_from), 10)
+    col_to = max(len(hdr_to), 10)
+
+    header = (f"{'':4s}{hdr_platform:<{col_platform}s} | "
+              f"{hdr_compression:<{col_compression}s} | "
+              f"{hdr_from:<{col_from}s} | "
+              f"{hdr_to:<{col_to}s}")
+    separator = "-" * len(header)
+
+    print(header)
+    print(separator)
+
+    for platform in platforms:
+        from_info = from_images.get(platform, {})
+        to_info = to_images.get(platform, {})
+
+        # After 'cosa build', 'size' is the uncompressed size and there is
+        # no 'uncompressed-size' field.  After 'cosa compress', 'size'
+        # becomes the compressed size and 'uncompressed-size' is added.
+        # We detect which state each image is in and label accordingly.
+        from_compressed = 'uncompressed-size' in from_info
+        to_compressed = 'uncompressed-size' in to_info
+
+        size_from = size_to_human_readable(from_info.get('size'))
+        size_to = size_to_human_readable(to_info.get('size'))
+
+        if from_compressed or to_compressed:
+            # At least one side has been compressed, show both rows
+            uncompressed_from = size_to_human_readable(
+                from_info.get('uncompressed-size') if from_compressed
+                else from_info.get('size'))
+            uncompressed_to = size_to_human_readable(
+                to_info.get('uncompressed-size') if to_compressed
+                else to_info.get('size'))
+            compressed_from = size_to_human_readable(
+                from_info.get('size') if from_compressed else None)
+            compressed_to = size_to_human_readable(
+                to_info.get('size') if to_compressed else None)
+
+            print(f"{'':4s}{platform:<{col_platform}s} | "
+                  f"{'compressed':<{col_compression}s} | "
+                  f"{compressed_from:<{col_from}s} | "
+                  f"{compressed_to:<{col_to}s}")
+            print(f"{'':4s}{platform:<{col_platform}s} | "
+                  f"{'uncompressed':<{col_compression}s} | "
+                  f"{uncompressed_from:<{col_from}s} | "
+                  f"{uncompressed_to:<{col_to}s}")
+        else:
+            # Neither side is compressed, just show the size
+            print(f"{'':4s}{platform:<{col_platform}s} | "
+                  f"{'size':<{col_compression}s} | "
+                  f"{size_from:<{col_from}s} | "
+                  f"{size_to:<{col_to}s}")
+
+
 # unfortunately, this has to come at the end to resolve functions
 DIFFERS = [
     Differ("rpms-rpm-ostree", "Diff RPMs using rpm-ostree",
@@ -677,6 +760,8 @@ DIFFERS = [
            needs_ostree=OSTreeImport.NO, function=diff_metal_du),
     Differ("metal-ls", "Compare directory listing of metal disk image content",
            needs_ostree=OSTreeImport.NO, function=diff_metal_ls),
+    Differ("sizes", "Diff artifact sizes from meta.json",
+           needs_ostree=OSTreeImport.NO, function=diff_sizes),
 ]
 
 if __name__ == '__main__':
